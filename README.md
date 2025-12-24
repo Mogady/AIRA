@@ -16,7 +16,7 @@ An AI-powered autonomous agent that monitors the financial world, performs deep 
 │                                                                             │
 │  ┌─────────────┐     ┌─────────────────────────────────────────────────┐   │
 │  │   Client    │────▶│              FastAPI REST API                    │   │
-│  │  (curl/UI)  │◀────│  /analyze  /status/{id}  /monitor_start  /health │   │
+│  │  (curl/UI)  │◀────│  /analyze  /status/{id}  /monitor_start  /search │   │
 │  └─────────────┘     └─────────────────┬───────────────────────────────┘   │
 │                                        │                                    │
 │                                        ▼                                    │
@@ -28,18 +28,28 @@ An AI-powered autonomous agent that monitors the financial world, performs deep 
 │                                    ▼                                        │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │                     LangGraph Agent (ReAct Pattern)                  │   │
+│  │                                                                      │   │
 │  │  ┌─────────┐   ┌──────────┐   ┌────────────┐   ┌─────────────────┐  │   │
-│  │  │  Parse  │──▶│   Plan   │──▶│  Execute   │──▶│    Reflect      │  │   │
-│  │  │  Query  │   │          │   │   Tools    │   │  (Self-Correct) │  │   │
+│  │  │  Parse  │──▶│ Collect  │──▶│  Analyze   │──▶│    Reflect      │  │   │
+│  │  │  Query  │   │   Data   │   │ Sentiment  │   │  (Self-Correct) │  │   │
 │  │  └─────────┘   └──────────┘   └────────────┘   └────────┬────────┘  │   │
 │  │                                                         │           │   │
-│  │                      ┌───────────────────────────────────┘           │   │
-│  │                      │ Sufficient?                                   │   │
-│  │                      ▼ YES                                           │   │
-│  │              ┌─────────────┐                                         │   │
-│  │              │  Synthesize │──▶ AnalysisReport (JSON)                │   │
-│  │              │   Report    │                                         │   │
-│  │              └─────────────┘                                         │   │
+│  │                 ┌───────────────────────────────────────┘           │   │
+│  │                 │                                                   │   │
+│  │         ┌──────┴──────┐                                             │   │
+│  │         │  Sufficient? │                                            │   │
+│  │         └──────┬──────┘                                             │   │
+│  │           NO   │   YES                                              │   │
+│  │    ┌───────────┴───────────┐                                        │   │
+│  │    ▼                       ▼                                        │   │
+│  │ ┌──────────┐       ┌─────────────┐                                  │   │
+│  │ │ Re-plan  │       │  Synthesize │──▶ AnalysisReport (JSON)         │   │
+│  │ │ (Different│       │   Report    │                                  │   │
+│  │ │ Strategy) │       └─────────────┘                                  │   │
+│  │ └────┬─────┘                                                        │   │
+│  │      │                                                              │   │
+│  │      └──────▶ Retry with different queries/focus                    │   │
+│  │                                                                      │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                    │                                        │
 │         ┌──────────────────────────┼──────────────────────────┐            │
@@ -47,8 +57,14 @@ An AI-powered autonomous agent that monitors the financial world, performs deep 
 │  ┌─────────────┐          ┌─────────────┐          ┌─────────────┐        │
 │  │    News     │          │  Sentiment  │          │    Data     │        │
 │  │  Retriever  │          │  Analyzer   │          │   Fetcher   │        │
-│  │  (NewsAPI)  │          │  (Claude)   │          │   (Mock)    │        │
+│  │  (NewsAPI)  │          │  (Claude)   │          │  (yfinance) │        │
 │  └─────────────┘          └─────────────┘          └─────────────┘        │
+│         │                                                   │              │
+│         │              ┌─────────────┐                      │              │
+│         └─────────────▶│    Web      │◀─────────────────────┘              │
+│                        │ Researcher  │                                     │
+│                        │ (DuckDuckGo)│                                     │
+│                        └─────────────┘                                     │
 │                                                                             │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │                         Data Layer                                   │   │
@@ -64,21 +80,38 @@ An AI-powered autonomous agent that monitors the financial world, performs deep 
 ## Features
 
 ### Core Features
-- **REST API** with async job processing (`/analyze`, `/status/{job_id}`)
+- **REST API** with async job processing (10 endpoints)
 - **Streamlit Web UI** with real-time progress tracking
 - **LangGraph Agent** with ReAct pattern for multi-step reasoning
-- **Three Integrated Tools**:
+- **Four Integrated Tools**:
   - 📰 **News Retriever** - Fetches recent news from NewsAPI.org
   - 📊 **Sentiment Analyzer** - AI-powered sentiment analysis via Claude
-  - 💹 **Data Fetcher** - Company financial data retrieval
+  - 💹 **Data Fetcher** - Real financial data from Yahoo Finance (yfinance)
+  - 🔍 **Web Researcher** - DuckDuckGo search with multiple research focuses
 - **Structured JSON Output** with Pydantic validation
 - **Docker Deployment** with one-command startup
 
 ### Advanced Features
-- **Reflection Loop** - Self-correction when data is insufficient
+- **Dynamic Reflection Loop** - Self-correction with different strategies when data is insufficient:
+  - `USE_WEB_FOR_NEWS` - When news API fails, uses web search with "news" focus
+  - `EXPAND_RESEARCH_FOCUS` - Tries different research focuses (analyst_ratings, earnings, competitive, risks)
 - **Long-Term Memory** - Vector embeddings with pgvector for semantic search
 - **Scheduled Monitoring** - Automatic checks with PROACTIVE_ALERT generation
+- **Semantic Search** - Query past analyses using natural language
 - **Structured Logging** - Agent's "Thought" process visible in logs
+
+### Reflection Mechanism (Self-Correction)
+
+The agent implements intelligent self-correction when data quality issues are detected:
+
+| Issue Detected | Strategy | Action |
+|----------------|----------|--------|
+| No news articles | `USE_WEB_FOR_NEWS` | Skip news API, use web search with "news" focus |
+| News too old (>30 days) | `USE_WEB_FOR_NEWS` | Supplement with web search for recent coverage |
+| No web research results | `EXPAND_RESEARCH_FOCUS` | Try different focus: analyst_ratings → earnings → competitive → risks |
+| No financial data | Proceed | Continue with available data |
+
+The agent will retry up to 2 times (configurable) with **different queries each time**, ensuring retries are meaningful rather than redundant.
 
 ## Tech Stack
 
@@ -91,6 +124,8 @@ An AI-powered autonomous agent that monitors the financial world, performs deep 
 | **Database** | PostgreSQL 16 + pgvector |
 | **Cache/Queue** | Redis 7 |
 | **News API** | NewsAPI.org |
+| **Financial Data** | Yahoo Finance (yfinance) |
+| **Web Search** | DuckDuckGo |
 | **Architecture** | Hexagonal (Ports & Adapters) |
 
 ## Quick Start
@@ -136,7 +171,10 @@ docker-compose up --build
 python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
-# Install dependencies
+# Install dependencies with uv (recommended)
+uv sync
+
+# Or with pip
 pip install -e .
 
 # Start services (requires PostgreSQL and Redis running)
@@ -150,38 +188,22 @@ python -m arq src.adapters.jobs.arq_worker.WorkerSettings
 streamlit run streamlit_app.py --server.port 8501
 ```
 
-## Web UI
+## API Endpoints
 
-A.I.R.A. includes a full-featured Streamlit web interface:
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/analyze` | Start a company analysis |
+| `GET` | `/status/{job_id}` | Get analysis status and results |
+| `POST` | `/monitor_start` | Start scheduled monitoring |
+| `DELETE` | `/monitor/{ticker}` | Stop monitoring a ticker |
+| `GET` | `/analyses` | List all analyses (with filters) |
+| `GET` | `/monitors` | List active monitors |
+| `GET` | `/status/{job_id}/thoughts` | Get agent's reasoning steps |
+| `GET` | `/status/{job_id}/tools` | Get tool execution details |
+| `POST` | `/search` | Semantic search across analyses |
+| `GET` | `/health` | Health check |
 
-### Features
-- **New Analysis** - Submit queries with real-time progress tracking
-- **Dashboard** - Overview of all analyses and monitoring status
-- **Monitoring** - Configure automated stock monitoring
-- **History** - Browse and filter past analyses
-
-### Screenshots
-
-```
-+----------------------------------+----------------------------------------+
-|         SIDEBAR                  |              MAIN CONTENT              |
-|                                  |                                        |
-|  A.I.R.A.                        |  NEW ANALYSIS                          |
-|                                  |                                        |
-|  > New Analysis                  |  [Enter query: Analyze Tesla (TSLA)]   |
-|    Dashboard                     |  [Analyze Button]                      |
-|    Monitoring                    |                                        |
-|    History                       |  Progress:                             |
-|                                  |  [====>     ] Fetching news...         |
-|  Backend Connected               |                                        |
-+----------------------------------+----------------------------------------+
-```
-
-### Access
-- **Local**: http://localhost:8501
-- **Docker**: http://localhost:8501
-
-## API Usage
+## API Usage Examples
 
 ### Start an Analysis
 
@@ -222,9 +244,16 @@ curl "http://localhost:8000/status/abc123-def456"
       "Expansion of Gigafactory production capacity on track",
       "Increased competition in EV market requires continued innovation"
     ],
-    "tools_used": ["news_retriever", "sentiment_analyzer", "data_fetcher"],
+    "tools_used": ["news_retriever", "sentiment_analyzer", "data_fetcher", "web_researcher"],
     "citation_sources": ["https://..."],
+    "financial_snapshot": {
+      "current_price": 248.50,
+      "market_cap": 789000000000,
+      "pe_ratio": 62.5,
+      "analyst_target_mean": 210.00
+    },
     "reflection_triggered": false,
+    "reflection_notes": null,
     "generated_at": "2024-12-23T10:30:00Z"
   }
 }
@@ -238,11 +267,52 @@ curl -X POST "http://localhost:8000/monitor_start" \
   -d '{"ticker": "AAPL", "interval_hours": 24}'
 ```
 
+### Semantic Search
+
+```bash
+curl -X POST "http://localhost:8000/search" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "companies with positive sentiment about AI", "limit": 5}'
+```
+
+### List Analyses
+
+```bash
+# List all analyses
+curl "http://localhost:8000/analyses"
+
+# Filter by ticker
+curl "http://localhost:8000/analyses?ticker=TSLA"
+
+# Filter by status
+curl "http://localhost:8000/analyses?status=COMPLETED&limit=10"
+```
+
+### View Agent Thoughts
+
+```bash
+curl "http://localhost:8000/status/abc123-def456/thoughts"
+```
+
 ### Health Check
 
 ```bash
 curl "http://localhost:8000/health"
 ```
+
+## Web UI
+
+A.I.R.A. includes a full-featured Streamlit web interface:
+
+### Features
+- **New Analysis** - Submit queries with real-time progress tracking
+- **Dashboard** - Overview of all analyses and monitoring status
+- **Monitoring** - Configure automated stock monitoring
+- **History** - Browse and filter past analyses
+
+### Access
+- **Local**: http://localhost:8501
+- **Docker**: http://localhost:8501
 
 ## Configuration
 
@@ -256,54 +326,89 @@ llm:
 
 news:
   provider: "newsapi"  # or "mock" for testing
-  articles_per_request: 5
+  articles_per_request: 10
   max_age_days: 30
+
+financial:
+  provider: "yfinance"  # or "mock" for testing
+
+search:
+  provider: "duckduckgo"  # or "mock" for testing
 
 agent:
   max_iterations: 10
-  max_reflection_cycles: 2
+  max_reflection_cycles: 2  # How many times to retry with different strategies
   reflection_enabled: true
+
+monitoring:
+  enabled: true
+  check_interval_hours: 24
+  min_new_articles: 5  # Trigger analysis if >= 5 new articles
 ```
 
 ## Project Structure
 
 ```
-aira/
+AIRA/
 ├── src/
 │   ├── domain/           # Core business models & exceptions
-│   ├── application/      # Ports (interfaces) & use cases
+│   │   ├── models.py     # Pydantic models (30+ data models)
+│   │   └── exceptions.py # Custom exception hierarchy
+│   ├── application/      # Ports (interfaces) & services
+│   │   ├── ports/        # Abstract interfaces for all providers
+│   │   └── services/     # Embedding service
 │   ├── adapters/         # Infrastructure implementations
-│   │   ├── api/          # FastAPI routes
-│   │   ├── agents/       # LangGraph agent
+│   │   ├── api/          # FastAPI routes & dependencies
+│   │   ├── agents/       # LangGraph agent (1300+ lines)
 │   │   ├── llm/          # Claude & mock providers
 │   │   ├── news/         # NewsAPI & mock providers
-│   │   ├── financial/    # Financial data providers
+│   │   ├── financial/    # yfinance & mock providers
+│   │   ├── search/       # DuckDuckGo & mock providers
 │   │   ├── embeddings/   # OpenAI & mock embeddings
 │   │   ├── storage/      # PostgreSQL & memory repos
 │   │   └── jobs/         # Arq worker & scheduler
-│   ├── tools/            # Agent tools
+│   ├── tools/            # Agent tools (4 tools)
+│   │   ├── news_retriever.py
+│   │   ├── sentiment_analyzer.py
+│   │   ├── data_fetcher.py
+│   │   └── web_researcher.py
 │   └── config/           # Settings & logging
-├── tests/                # Test suite
+├── tests/
+│   ├── unit/             # Unit tests
+│   ├── integration/      # Integration tests (including reflection tests)
+│   └── api/              # API endpoint tests
 ├── main.py               # FastAPI entry point
 ├── worker.py             # Arq worker entry point
 ├── streamlit_app.py      # Streamlit UI application
-├── Dockerfile
-├── docker-compose.yml
-└── config.yaml
+├── Dockerfile            # Multi-stage Docker build
+├── docker-compose.yml    # 5-service orchestration
+├── config.yaml           # Application configuration
+└── pyproject.toml        # Dependencies (uv/pip)
 ```
 
 ## Testing
 
 ```bash
 # Run all tests
-pytest
+.venv/bin/python -m pytest
 
 # Run with coverage
-pytest --cov=src --cov-report=html
+.venv/bin/python -m pytest --cov=src --cov-report=html
 
-# Run specific test file
-pytest tests/unit/test_models.py
+# Run specific test categories
+.venv/bin/python -m pytest tests/unit/              # Unit tests
+.venv/bin/python -m pytest tests/integration/       # Integration tests
+.venv/bin/python -m pytest tests/api/               # API tests
+
+# Run reflection mechanism tests
+.venv/bin/python -m pytest tests/integration/test_reflection.py -v
 ```
+
+### Test Coverage
+
+- **Unit tests**: Models, tools, services
+- **Integration tests**: Full agent flow, reflection mechanism, providers
+- **API tests**: All endpoints, error handling
 
 ## Design Decisions
 
@@ -332,13 +437,48 @@ pytest tests/unit/test_models.py
 | `ANTHROPIC_API_KEY` | Claude API key | Yes (for real LLM) |
 | `OPENAI_API_KEY` | OpenAI API key | Yes (for embeddings) |
 | `NEWS_API_KEY` | NewsAPI.org key | Yes (for real news) |
+| `POSTGRES_HOST` | PostgreSQL host | Yes |
 | `POSTGRES_PASSWORD` | Database password | Yes |
+| `REDIS_HOST` | Redis host | Yes |
 | `REDIS_PASSWORD` | Redis password | No |
 
-## License
+## Output Schema
 
-This project was created for the InVitro Capital case study assessment.
+The analysis report includes:
 
----
-
-**Built with Claude Sonnet 4.5, LangGraph, and FastAPI**
+```json
+{
+  "company_ticker": "TSLA",
+  "company_name": "Tesla, Inc.",
+  "analysis_summary": "Executive summary with specific numbers...",
+  "sentiment_score": 0.45,
+  "key_findings": ["Finding 1", "Finding 2", "..."],
+  "tools_used": ["news_retriever", "sentiment_analyzer", "data_fetcher", "web_researcher"],
+  "citation_sources": ["https://..."],
+  "news_summary": "Summary of news coverage...",
+  "financial_snapshot": {
+    "current_price": 248.50,
+    "market_cap": 789000000000,
+    "pe_ratio": 62.5,
+    "analyst_target_mean": 210.00,
+    "...": "50+ financial metrics"
+  },
+  "investment_thesis": "Bull case, bear case, balanced view...",
+  "risk_factors": ["Risk 1", "Risk 2"],
+  "competitive_context": "Market positioning...",
+  "analyst_consensus": {
+    "target_mean": 210.00,
+    "recommendation": "hold",
+    "number_of_analysts": 45
+  },
+  "catalyst_events": ["Upcoming catalyst 1", "..."],
+  "web_research": {
+    "results": [...],
+    "queries_used": [...]
+  },
+  "reflection_triggered": true,
+  "reflection_notes": "No news articles retrieved",
+  "analysis_type": "ON_DEMAND",
+  "generated_at": "2024-12-24T10:30:00Z",
+  "iteration_count": 2
+}
