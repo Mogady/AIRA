@@ -1,0 +1,8 @@
+# PostgreSQL with pgvector and init script
+FROM pgvector/pgvector:pg16
+
+# Copy init script into the container
+COPY init.sql /docker-entrypoint-initdb.d/init.sql
+
+# Ensure the script is readable
+RUN chmod 644 /docker-entrypoint-initdb.d/init.sql

@@ -1,0 +1,164 @@
+# A.I.R.A. - Docker Compose Configuration
+# Run with: docker-compose up --build
+
+services:
+  # ==========================================================================
+  # A.I.R.A. API Service
+  # ==========================================================================
+  aira-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: aira:latest
+    container_name: aira-api
+    ports:
+      - "8000:8000"
+    environment:
+      # Database
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=aira
+      - POSTGRES_USER=aira
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD environment variable is required}
+      # Redis
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      # API Keys (from .env file)
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - NEWS_API_KEY=${NEWS_API_KEY:-}
+      # Application
+      - APP_ENV=${APP_ENV:-development}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - aira-network
+
+  # ==========================================================================
+  # A.I.R.A. Streamlit UI
+  # ==========================================================================
+  aira-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: aira:latest
+    container_name: aira-ui
+    command: ["streamlit", "run", "streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+    ports:
+      - "8501:8501"
+    environment:
+      - API_BASE=http://aira-api:8000
+    depends_on:
+      - aira-api
+    restart: unless-stopped
+    networks:
+      - aira-network
+
+  # ==========================================================================
+  # A.I.R.A. Worker Service (Arq)
+  # ==========================================================================
+  aira-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: aira:latest
+    container_name: aira-worker
+    command: ["python", "-m", "arq", "src.adapters.jobs.arq_worker.WorkerSettings"]
+    environment:
+      # Database 
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=aira
+      - POSTGRES_USER=aira
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD environment variable is required}
+      # Redis
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      # API Keys (from .env file)
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - NEWS_API_KEY=${NEWS_API_KEY:-}
+      # Application
+      - APP_ENV=${APP_ENV:-development}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    restart: unless-stopped
+    networks:
+      - aira-network
+
+  # ==========================================================================
+  # PostgreSQL Database with pgvector
+  # ==========================================================================
+  postgres:
+    build:
+      context: .
+      dockerfile: Dockerfile.postgres
+    container_name: aira-postgres
+    environment:
+      - POSTGRES_DB=aira
+      - POSTGRES_USER=aira
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD environment variable is required}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aira -d aira"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aira-network
+
+  # ==========================================================================
+  # Redis Cache & Job Queue
+  # ==========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: aira-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aira-network
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  aira-network:
+    driver: bridge
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  postgres_data:
+  redis_data:

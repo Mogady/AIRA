@@ -1,0 +1,64 @@
+# A.I.R.A. Configuration File
+# All application settings - no hardcoded values in code
+
+app:
+  name: "A.I.R.A."
+  version: "1.0.0"
+  debug: false
+  log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  log_format: "json"  # json or text (text for development)
+
+api:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 1
+  cors_origins:
+    - "*"
+
+database:
+  host: "localhost"
+  port: 5432
+  name: "aira"
+  user: "aira"
+  pool_size: 5
+  max_overflow: 10
+
+redis:
+  host: "localhost"
+  port: 6379
+  db: 0
+
+llm:
+  provider: "anthropic"  # mock or anthropic
+  model: "claude-sonnet-4-5-20250929"
+  max_tokens: 4096
+  temperature: 0.7
+  timeout: 120
+
+embeddings:
+  provider: "mock"  # mock or openai
+  model: "text-embedding-ada-002"
+  dimensions: 1536
+
+news:
+  provider: "newsapi"  # mock or newsapi
+  base_url: "https://newsapi.org/v2"
+  articles_per_request: 10  # Increased from 5 for better coverage
+  max_age_days: 30  # Articles older than this trigger reflection
+
+financial:
+  provider: "yfinance"  # mock or yfinance
+  cache_ttl: 3600  # Cache financial data for 1 hour
+
+agent:
+  max_iterations: 10
+  max_reflection_cycles: 2
+  reflection_enabled: true
+
+monitoring:
+  enabled: true
+  check_interval_hours: 24
+  min_new_articles: 5  # Trigger analysis if >= 5 new articles
+
+storage:
+  provider: "postgres"  # postgres or memory (memory for testing only)
