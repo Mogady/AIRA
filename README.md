@@ -408,27 +408,7 @@ AIRA/
 
 - **Unit tests**: Models, tools, services
 - **Integration tests**: Full agent flow, reflection mechanism, providers
-- **API tests**: All endpoints, error handling
-
-## Design Decisions
-
-### Why LangGraph?
-- Native support for reflection loops (cyclic graphs)
-- Explicit state machine makes agent reasoning transparent
-- Production-ready with checkpointing support
-- Better debugging compared to LangChain agents
-
-### Why Hexagonal Architecture?
-- Easy to swap implementations (mock ↔ real)
-- Clean separation enables comprehensive testing
-- Demonstrates senior-level software engineering
-- Future-proof for new providers
-
-### Why Arq over Celery?
-- Async-native (perfect for FastAPI)
-- Simpler setup (no RabbitMQ needed)
-- Sufficient for the use case
-- Lower operational overhead
+- **API tests**: All endpoints, error handling 
 
 ## Environment Variables
 
