@@ -23,7 +23,7 @@ import streamlit as st
 
 API_BASE = os.getenv("API_BASE", "http://localhost:8000")
 POLL_INTERVAL = 1.5  # seconds between status polls
-HEALTH_CHECK_TTL = 3600  # Cache health check result for 1 hour (seconds)
+HEALTH_CHECK_TTL = 86400  # Cache health check result for 24 hours (seconds)
 
 # Page configuration
 st.set_page_config(
